@@ -127,7 +127,7 @@ local Config = dmc_navigator_data
 
 
 local Objects = require 'dmc_objects'
-local Utils = require 'dmc_utils'
+-- local Utils = require 'dmc_utils'
 
 
 
