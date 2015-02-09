@@ -307,31 +307,30 @@ end
 
 function Navigator:addView( key, object, params )
 	-- print( "Navigator:addView" )
-	params = params or {}
+	-- params = params or {}
+	assert( key )
+	assert( object )
 	--==--
-
-	local W, H = self._width, self._height
-	local H_CENTER, V_CENTER = W*0.5, H*0.5
-
 	self._views[ key ] = object
 	object.isVisible = false
 
 	local o = object
+	-- allow other types of objects, frameworks, etc
 	if object.view then o = object.view end
+
 	o.x, o.y = 0, 0
-
 	self:insert( o )
-
 end
 
 function Navigator:removeView( key )
 	-- print( "Navigator:removeView" )
-	local o
-	if key then
-		o = self._views[ key ]
-		self._views[ key ] = nil
+	assert( key )
+	--==--
+	local o = self._views[ key ]
+	self._views[ key ] = nil
+	if not o then
+		print( "[WARNING] Navigator:removeView key not found" )
 	end
-
 	return o
 end
 
@@ -348,7 +347,6 @@ function Navigator:gotoView( key, params )
 	params.do_animation = params.do_animation or true
 	params.direction = params.direction or Navigator.FORWARD
 	--==--
-
 	local W, H = self._width, self._height
 	local H_CENTER, V_CENTER = W*0.5, H*0.5
 
@@ -384,7 +382,6 @@ end
 
 --====================================================================--
 --== Private Methods
-
 
 
 function Navigator:_transitionViews( next_key, params )
@@ -479,10 +476,11 @@ end
 
 
 
-
 --====================================================================--
 --== Event Handlers
 
+
+-- none
 
 
 
