@@ -16,12 +16,26 @@ module_config = {
 		"requires": [
 			"dmc-corona-boot",
 			"DMC-Lua-Library",
-			"dmc-objects"
+			"dmc-objects",
+			"dmc-utils"
 		]
 	},
 	"examples": {
 		"base_dir": "examples",
-		"apps": []
+		"apps": [
+			{
+				"exp_dir": "dmc-navigator-simple",
+				"requires": [
+					"DMC-Corona-Widgets"
+				],
+				"mod_dir_map": {
+					"default_dir": "",
+					"libs": {
+						"DMC-Corona-Widgets":""
+					}
+				}
+			}
+		]
 	},
 	"tests": {
 		"files": [],
