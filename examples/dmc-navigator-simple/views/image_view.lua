@@ -53,6 +53,8 @@ function ImageView:__init__( params )
 	self._width = params.width
 	self._height = params.height
 
+	self.nav_bar_item = nil -- for navigation view
+
 	self._data = params.data -- gallery data
 
 	--== Object References ==--
