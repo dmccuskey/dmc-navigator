@@ -173,3 +173,11 @@ navigator.nav_bar = nav_bar -- set nav bar delegate
 o = createGalleriesView( galleries_data )
 navigator:pushView( o )
 
+
+--== Cleanup
+
+timer.performWithDelay( 10000, function()
+	navigator:cleanUp()
+	navigator:removeSelf()
+end)
+
