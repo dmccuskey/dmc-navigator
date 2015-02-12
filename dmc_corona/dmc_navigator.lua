@@ -268,14 +268,6 @@ function Navigator:__undoInitComplete__()
 	self._btn_back_f = nil
 
 	self:cleanUp()
-
-	-- see if we have nav bar delegate
-	o = self._nav_bar
-	if o then
-		o:removeSelf()
-		self._nav_bar = nil
-	end
-
 	--==--
 	self:superCall( '__undoInitComplete__' )
 end
@@ -310,7 +302,7 @@ end
 function Navigator:pushView( view, params )
 	-- print( "Navigator:pushView" )
 	params = params or {}
-	assert( view )
+	assert( view, "[ERROR] Navigator:pushView requires a view object" )
 	-- assert( type(item)=='table' and item.isa and item:isa( NavItem ), "pushNavItem: item must be a NavItem" )
 	if params.animate==nil then params.animate=true end
 	--==--
