@@ -1,7 +1,7 @@
 --====================================================================--
 -- dmc_navigator.lua
 --
--- Documentation:
+-- Documentation: https://github.com/dmccuskey/dmc-navigator
 --====================================================================--
 
 --[[
@@ -39,7 +39,7 @@ SOFTWARE.
 
 -- Semantic Versioning Specification: http://semver.org/
 
-local VERSION = "0.3.0"
+local VERSION = "0.3.1"
 
 
 
@@ -365,9 +365,10 @@ function Navigator:_getPushNavBarTransition( view, params )
 	return callback
 end
 
-function Navigator:_getPopNavBarTransition()
+function Navigator:_getPopNavBarTransition( params )
 	-- print( "Navigator:_getPopNavBarTransition" )
 	params = params or {}
+	if not self._nav_bar then return end
 	return self._nav_bar:_popNavItemGetTransition( params )
 end
 
