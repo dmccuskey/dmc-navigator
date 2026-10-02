@@ -1,11 +1,12 @@
 --====================================================================--
 -- Navigator Simple
 --
--- basic streaming example
+-- browse galleries of images: each page slides in from the right,
+-- Back slides it out, and All Galleries goes back to the first page
 --
 -- Sample code is MIT licensed, the same license which covers Lua itself
 -- http://en.wikipedia.org/wiki/MIT_License
--- Copyright (C) 2014 David McCuskey. All Rights Reserved.
+-- Copyright (C) 2014-2026 David McCuskey. All Rights Reserved.
 --====================================================================--
 
 
@@ -19,16 +20,12 @@ print( '\n\n##############################################\n\n' )
 
 
 local Navigator = require 'dmc_corona.dmc_navigator'
-local Utils = require 'dmc_corona.dmc_utils'
-local Widgets = require 'dmc_widgets'
-
---== Components
 
 local galleries_data = require 'data.gallery'
 
-local GalleriesView = require 'views.galleries_view'
-local GalleryView = require 'views.gallery_view'
+local ListView = require 'views.list_view'
 local ImageView = require 'views.image_view'
+local newButton = require 'views.button'
 
 
 
@@ -37,14 +34,14 @@ local ImageView = require 'views.image_view'
 
 
 local W, H = display.contentWidth, display.contentHeight
-local H_CENTER, V_CENTER = W*0.5, H*0.5
+local H_CENTER = W*0.5
 
-local navigator, nav_bar -- set later
-local o
+local BAR_HEIGHT = 50
 
-local createGalleriesView, removeGalleriesView, galleriesView_handler
-local createGalleryView, removeGalleryView, galleryView_handler
-local createImageView, removeImageView, imageView_handler
+display.setStatusBar( display.HiddenStatusBar )
+display.setDefault( "background", 0.15, 0.15, 0.18 )
+
+local navigator, title, back_btn -- set later
 
 
 
@@ -52,95 +49,78 @@ local createImageView, removeImageView, imageView_handler
 --== Support Functions
 
 
---== Galleries
-
-createGalleriesView = function( galleries )
-	-- print( "createGalleriesView", galleries )
-	local o = GalleriesView:new{
-		width=W,
-		height=H-nav_bar.HEIGHT,
-		data=galleries
-	}
-	o:addEventListener( o.EVENT, galleriesView_handler )
-	return o
-end
-removeGalleriesView = function( o )
-	-- print( "removeGalleriesView", o )
-	o:removeEventListener( o.EVENT, galleriesView_handler )
-	o:removeSelf()
-end
-
-galleriesView_handler = function( event )
-	-- print( "Main:galleriesView_handler", event.type )
-	-- Utils.print( event )
-	local gallery_data = event.data
-	local o = createGalleryView( gallery_data )
-	navigator:pushView( o )
+-- show the title of the page the navigator is going to,
+-- and Back on every page but the first
+--
+local function updateTitleBar( view, count )
+	title.text = view.title
+	back_btn.isVisible = ( count>1 )
 end
 
 
---== Gallery
-
-createGalleryView = function( gallery )
-	local o = GalleryView:new{
-		width=W,
-		height=H-nav_bar.HEIGHT,
-		data=gallery
-	}
-	o:addEventListener( o.EVENT, galleryView_handler )
-	return o
-end
-removeGalleryView = function( o )
-	-- print( "removeGalleryView", o )
-	o:removeEventListener( o.EVENT, galleryView_handler )
-	o:removeSelf()
-end
-galleryView_handler = function( event )
-	-- print( "Main:galleryView_handler", event.type )
-	-- Utils.print( event )
-	local image_data = event.data
-	local o = createImageView( image_data )
-	navigator:pushView( o )
+local function pushPage( view )
+	navigator:pushView( view )
+	-- the first view is on the stack at once, the others when their slide ends
+	local views = navigator.views
+	updateTitleBar( view, views[#views]==view and #views or #views+1 )
 end
 
-
---== Image
-
-createImageView = function( image )
-	local o = ImageView:new{
-		width=W,
-		height=H-nav_bar.HEIGHT,
-		data=image
-	}
-	o:addEventListener( o.EVENT, imageView_handler )
-	return o
-end
-removeImageView = function( o )
-	-- print( "removeImageView", o )
-	o:removeEventListener( o.EVENT, imageView_handler )
-	o:removeSelf()
-end
-imageView_handler = function( event )
-	-- print( "Main:imageView_handler", event.type )
-	-- none
-end
-
-
-local function navigatorEvent_handler( event )
-	-- print( "Main:navigatorEvent_handler", event.type )
-	local nav = event.target
-	if event.type == nav.REMOVED_VIEW then
-		assert( event.view )
-		local view = event.view
-		if view:isa( GalleriesView ) then
-			removeGalleriesView( view )
-		elseif view:isa( GalleryView ) then
-			removeGalleryView( view )
-		elseif view:isa( ImageView ) then
-			removeImageView( view )
-		end
+local function goBack()
+	if navigator:popViewAnimated() then
+		local views = navigator.views
+		updateTitleBar( views[#views-1], #views-1 )
 	end
 end
+
+local function goHome()
+	if navigator:popToRoot() then
+		local views = navigator.views
+		updateTitleBar( views[1], 1 )
+	end
+end
+
+
+local createGalleryView, createImageView
+
+local function newPage( params )
+	params.width, params.height = W, H-BAR_HEIGHT
+	return params
+end
+
+local function createGalleriesView( galleries )
+	local o = ListView:new( newPage{ title="My Galleries", items=galleries } )
+	o:addEventListener( o.EVENT, function( event )
+		if event.type==o.SELECTED then pushPage( createGalleryView( event.data ) ) end
+	end )
+	return o
+end
+
+createGalleryView = function( gallery )
+	local o = ListView:new( newPage{ title=gallery.name, items=gallery.images } )
+	o:addEventListener( o.EVENT, function( event )
+		if event.type==o.SELECTED then pushPage( createImageView( event.data ) ) end
+	end )
+	return o
+end
+
+createImageView = function( image )
+	local o = ImageView:new( newPage{ image=image } )
+	o:addEventListener( o.EVENT, function( event )
+		if event.type==o.HOME then goHome() end
+	end )
+	return o
+end
+
+
+-- the navigator is done with a view once it has slid out
+--
+local function navigatorEvent_handler( event )
+	local nav = event.target
+	if event.type == nav.REMOVED_VIEW then
+		event.view:removeSelf()
+	end
+end
+
 
 
 --====================================================================--
@@ -148,36 +128,26 @@ end
 --====================================================================--
 
 
--- create nav bar
+-- title bar
 
-nav_bar = Widgets.newNavBar{
-	width=W
-}
-nav_bar.x, nav_bar.y = H_CENTER, 0
+local o = display.newRect( H_CENTER, 0, W, BAR_HEIGHT )
+o:setFillColor( 0.25, 0.25, 0.3 )
+o.anchorY = 0
 
--- create navigator
+title = display.newText{ text="", x=H_CENTER, y=BAR_HEIGHT*0.5, fontSize=20 }
+
+back_btn = newButton{ label="Back", width=70, height=34, onRelease=goBack }
+back_btn.x, back_btn.y = 45, BAR_HEIGHT*0.5
+
+-- navigator, below the title bar; it places its views by their top center
 
 navigator = Navigator:new{
 	width=W,
-	height=H-nav_bar.HEIGHT,
-	default_reference=display.TopCenterReferencePoint
+	height=H-BAR_HEIGHT
 }
-navigator.x, navigator.y = H_CENTER, 0+nav_bar.HEIGHT
+navigator.x, navigator.y = H_CENTER, BAR_HEIGHT
 navigator:addEventListener( navigator.EVENT, navigatorEvent_handler )
 
-navigator.nav_bar = nav_bar -- set nav bar delegate
+-- the first page appears at once
 
-
--- create root Galleries View, and push
-
-o = createGalleriesView( galleries_data )
-navigator:pushView( o )
-
-
---== Cleanup
-
-timer.performWithDelay( 10000, function()
-	navigator:cleanUp()
-	navigator:removeSelf()
-end)
-
+pushPage( createGalleriesView( galleries_data ) )

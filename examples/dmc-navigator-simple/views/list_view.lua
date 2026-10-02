@@ -1,8 +1,9 @@
 --====================================================================--
--- views/image_view.lua
+-- views/list_view.lua
 --
--- an image, here a colored square, with a button which goes
--- back to the first page (dispatches ImageView.HOME)
+-- a page with a button for each item; tapping one dispatches
+-- ListView.SELECTED with the item as event.data
+-- the navigator places its views by their top center
 --====================================================================--
 
 
@@ -25,41 +26,41 @@ local ComponentBase = Objects.ComponentBase
 
 
 --====================================================================--
---== Image View Class
+--== List View Class
 --====================================================================--
 
 
-local ImageView = newClass( ComponentBase, {name="Image View"} )
+local ListView = newClass( ComponentBase, {name="List View"} )
 
 --== Event Constants
 
-ImageView.EVENT = 'image-view-event'
+ListView.EVENT = 'list-view-event'
 
-ImageView.HOME = 'home-event'
+ListView.SELECTED = 'item-selected-event'
 
 
 --======================================================--
 -- Start: Setup DMC Objects
 
-function ImageView:__init__( params )
+function ListView:__init__( params )
 	params = params or {}
 	self:superCall( '__init__', params )
 	--==--
 
 	if self.is_class then return end
 
-	assert( params.width and params.height, "Image View: requires dimensions" )
-	assert( params.image, "Image View: requires image" )
+	assert( params.width and params.height, "List View: requires dimensions" )
+	assert( params.title and params.items, "List View: requires title and items" )
 
 	self._width = params.width
 	self._height = params.height
-	self._image = params.image
+	self._items = params.items
 
-	self.title = params.image.name -- shown by the title bar
+	self.title = params.title -- shown by the title bar
 end
 
 
-function ImageView:__createView__()
+function ListView:__createView__()
 	self:superCall( '__createView__' )
 	--==--
 	local W, H = self._width, self._height
@@ -69,19 +70,16 @@ function ImageView:__createView__()
 	o.anchorX, o.anchorY = 0.5, 0
 	self:insert( o )
 
-	o = display.newRect( 0, 30, W-80, W-80 )
-	o:setFillColor( unpack( self._image.color ) )
-	o.anchorY = 0
-	self:insert( o )
-
-	o = newButton{
-		label="All Galleries",
-		onRelease=function()
-			self:dispatchEvent( self.HOME )
-		end
-	}
-	o.x, o.y = 0, W-80 + 80
-	self:insert( o )
+	for i, item in ipairs( self._items ) do
+		o = newButton{
+			label=item.name,
+			onRelease=function()
+				self:dispatchEvent( self.SELECTED, item )
+			end
+		}
+		o.x, o.y = 0, 60 + (i-1)*70
+		self:insert( o )
+	end
 end
 
 -- END: Setup DMC Objects
@@ -89,4 +87,4 @@ end
 
 
 
-return ImageView
+return ListView

@@ -1,9 +1,9 @@
 --====================================================================--
 -- dmc_corona_boot.lua
 --
---  utility to read in dmc_corona configuration file
+--  utility to read in configuration file for dmc-corona-library
 --
--- Documentation:
+-- Documentation: https://github.com/dmccuskey/dmc-corona-boot
 --====================================================================--
 
 --[[
@@ -41,7 +41,7 @@ SOFTWARE.
 
 -- Semantic Versioning Specification: http://semver.org/
 
-local VERSION = "1.5.0"
+local VERSION = "1.6.0"
 
 
 
@@ -58,12 +58,12 @@ if not has_json then json = nil end
 --== Setup, Constants
 
 
-local tinsert = table.insert
-local tconcat = table.concat
 local sfind = string.find
+local sgmatch = string.gmatch 
 local sgsub = string.gsub
-
-local PLATFORM_NAME = system.getInfo( 'platformName' )
+local tconcat = table.concat
+local tinsert = table.insert
+local tremove = table.remove
 
 
 
@@ -76,7 +76,7 @@ local Utils = {} -- make copying from dmc_utils easier
 
 function Utils.extend( fromTable, toTable )
 
-	function _extend( fT, tT )
+	local function _extend( fT, tT )
 
 		for k,v in pairs( fT ) do
 
@@ -105,7 +105,7 @@ function Utils.split( str, sep )
 	if sep == nil then
 		sep = "%s"
 	end
-	t={} ; i=1
+	local t, i = {}, 1
 	for str in string.gmatch( str, "([^"..sep.."]+)") do
 		t[i] = str
 		i = i + 1
@@ -113,15 +113,6 @@ function Utils.split( str, sep )
 	return t
 end
 
-
-function Utils.getSystemSeparator()
-	-- print( "Utils.getSystemSeparator")
-	if PLATFORM_NAME == 'Win' then
-		return '\\'
-	else
-		return '/'
-	end
-end
 
 function Utils.propertyIn( list, property )
 	for i = 1, #list do
@@ -131,43 +122,44 @@ function Utils.propertyIn( list, property )
 end
 
 
--- takes Lua module dot to system path
+function Utils.guessPathPlatform( path )
+	-- print( "Utils.guessPathPlatform", path )
+	local win, ios = 0, 0
+	for match in sgmatch( path, '\\' ) do
+		win=win+1
+	end
+	for match in sgmatch( path, '/' ) do
+		ios=ios+1
+	end
+
+	if win>ios then
+		return '\\'
+	else
+		return '/'
+	end
+end
+
+
+-- takes System Path to Lua module dot
 -- eg, lib.dmc_lua.lua_object >> lib/dmc_lua/lua_object
 --
 function Utils.sysPathToRequirePath( sys_path )
 	-- print( "sysPathToRequirePath", sys_path )
-	local sys_tbl = Utils.split( sys_path, Utils.getSystemSeparator() )
+	local sys_tbl = Utils.split( sys_path, Utils.guessPathPlatform( sys_path ) )
 	-- clean off any dots
 	for i=#sys_tbl, 1, -1 do
 		if sys_tbl[i]=='.' then
-			table.remove( sys_tbl, i )
+			tremove( sys_tbl, i )
 		end
 	end
-	return table.concat( sys_tbl, '.' )
+	return tconcat( sys_tbl, '.' )
 end
-
--- takes Lua module dot to system path
--- eg, lib.dmc_lua.lua_object >> lib/dmc_lua/lua_object
---
-function Utils.cleanSystemPath( sys_path )
-	-- print( "cleanSystemPath", sys_path )
-	local sep = Utils.getSystemSeparator()
-	local sys_tbl = Utils.split( sys_path, sep )
-	-- clean off any dots
-	for i=#sys_tbl, 1, -1 do
-		if sys_tbl[i]=='.' then
-			table.remove( sys_tbl, i )
-		end
-	end
-	return table.concat( sys_tbl, sep )
-end
-
 
 
 
 --== Start lua_files copies ==--
 
--- version 0.2.0
+-- version 0.2.0; the config parser (readConfigFile) from 0.3.0
 
 local File = {}
 
@@ -205,7 +197,7 @@ end
 function File._readLines( fh )
 	local contents = {}
 	for line in fh:lines() do
-		table.insert( contents, line )
+		tinsert( contents, line )
 	end
 	return contents
 end
@@ -273,7 +265,7 @@ function File.processSectionLine( line )
 	assert( type(line)=='string', "expected string as parameter" )
 	assert( #line > 0 )
 	--==--
-	local key = line:match( "%[([%u_]+)%]" )
+	local key = line:match( "^%[(%u[%w_]*)%]" )
 	assert( type(key) ~= 'nil', "key not found in line: "..tostring(line) )
 	return string.lower( key ) -- use only lowercase inside of module
 end
@@ -284,14 +276,12 @@ function File.processKeyLine( line )
 	assert( #line > 0 )
 	--==--
 
-	-- split up line into key/value
-	local raw_key, raw_val = line:match( "([%u_:]+)%s*=%s*(.-)%s*$" )
-
-	-- split up key parts
-	local keys = {}
-	for k in string.gmatch( raw_key, "([^:]+)") do
-		table.insert( keys, #keys+1, k )
+	-- split up line into key/value, KEY:TYPE = value or KEY = value
+	local key_name, key_type, raw_val = line:match( "^(%u[%w_]*)%s*:%s*(%w+)%s*=%s*(.-)%s*$" )
+	if key_name == nil then
+		key_name, raw_val = line:match( "^(%u[%w_]*)%s*=%s*(.-)%s*$" )
 	end
+	assert( key_name ~= nil, "expected KEY = value in line: "..tostring(line) )
 
 	-- trim off quotes, make sure balanced
 	local q1, q2, trim
@@ -299,16 +289,16 @@ function File.processKeyLine( line )
 	assert( q1 == q2, "quotes must match" )
 
 	-- process key and value
-	local key_name, key_type = unpack( keys )
 	key_name = File.processKeyName( key_name )
 	key_type = File.processKeyType( key_type )
 
 	-- get final value
-	if key_type and Utils.propertyIn( KEY_TYPES, key_type ) then
-		local method = 'castTo_'..key_type
-		key_value = File[method]( trim )
-	else
+	local key_value
+	if key_type == nil then
 		key_value = File.castTo_string( trim )
+	else
+		assert( Utils.propertyIn( KEY_TYPES, key_type ), "unknown type '"..key_type.."' in line: "..tostring(line) )
+		key_value = File[ 'castTo_'..key_type ]( trim )
 	end
 
 	return key_name, key_value
@@ -332,11 +322,13 @@ function File.processKeyType( name )
 end
 
 
+-- 'true' or 'false', any case
 function File.castTo_boolean( value )
 	assert( type(value)=='string' )
 	--==--
-	if value == 'true' then return true
-	else return false end
+	local lower = string.lower( value )
+	assert( lower == 'true' or lower == 'false', "expected true or false, got '"..value.."'" )
+	return lower == 'true'
 end
 File.castTo_bool = File.castTo_boolean
 
@@ -347,7 +339,7 @@ function File.castTo_integer( value )
 	assert( type(value)=='string' )
 	--==--
 	local num = tonumber( value )
-	assert( type(num) == 'number' )
+	assert( type(num) == 'number' and num == math.floor( num ), "expected a whole number, got '"..value.."'" )
 	return num
 end
 File.castTo_int = File.castTo_integer
@@ -360,7 +352,7 @@ end
 function File.castTo_path( value )
 	assert( type(value)=='string' )
 	--==--
-	return string.gsub( value, '[/\\]', "." )
+	return ( string.gsub( value, '[/\\]', "." ) )
 end
 function File.castTo_string( value )
 	assert( type(value)~='nil' and type(value)~='table' )
@@ -430,20 +422,44 @@ local DMC_CORONA_CONFIG_FILE = 'dmc_corona.cfg'
 local DMC_CORONA_DEFAULT_SECTION = 'dmc_corona'
 
 -- locations of third party libs used by dmc_corona
-local THIRD_LIBS = { 'lib/dmc_lua' }
+local THIRD_LIBS = {}
+
+--- add 'lib/dmc' location
+tinsert( THIRD_LIBS, tconcat( {'lib','dmc_lua'}, '.' ) )
 
 local REQ_STACK = {}
 
 
 local function pushStack( value )
-	table.insert( REQ_STACK, value )
+	-- print( "pre stack (pre):", #REQ_STACK)
+	tinsert( REQ_STACK, value )
 end
 local function popStack()
+	-- print( "pop stack (pre):", #REQ_STACK)
 	if REQ_STACK == 0 then
 		-- print( "nothing ins stack")
-		error( "nothing in stack" )
+		error( "!!!! nothing in stack" )
 	end
-	return table.remove( REQ_STACK )
+	return tremove( REQ_STACK )
+end
+
+local wrapError, unwrapError, processError
+
+wrapError = function( stack, message, level )
+	-- we package or unpackage
+	local package = { stack, message, level }
+	return processError( stack, package )
+end
+unwrapError = function( package )
+	return unpack( package )
+end
+processError = function( stack, package )
+	if stack==0 then
+		local stack, message, level = unwrapError( package )
+		return message, level
+	else
+		return package
+	end
 end
 
 
@@ -451,8 +467,6 @@ local function newRequireFunction( module_name )
 	-- print( "dmc_require: ", module_name )
 	assert( type(module_name)=='string', "dmc_require: expected string module name" )
 	--==--
-	local resource_path = system.pathForFile( system.ResourceDirectory ) or ""
-
 	local _paths = _G.__dmc_require.paths
 	local _require = _G.__dmc_require.require
 	local lua_paths = Utils.extend( _paths, {} )
@@ -463,41 +477,40 @@ local function newRequireFunction( module_name )
 	local idx = 1
 
 	pushStack( module_name )
+
 	repeat
 		local mod_path = lua_paths[idx]
 		local path = ( mod_path=='' and mod_path or mod_path..'.' ) .. module_name
 
 		local has_module, result = pcall( _require, path )
-
 		if has_module then
 			library = result
 
 		elseif type( result )=='table' then
-			-- print( "from below", #REQ_STACK)
-			err = result
-			popStack()
+			-- this is a packaged error from the call-stack
+			-- now we're just trying to show it
+			-- so we have to unwind the call-stack
 
-			if #REQ_STACK==0 then
-				local stk = table.remove( result, 1 )
-				error( table.concat( result, '\n' ), 3 )
-			else
-				error( result )
-			end
+			err = result
 
 		else
-			if sfind( result, '^error loading module' ) then
-				-- print( "error loading module", #REQ_STACK )
-				result="\n"..result
-				popStack()
-				if #REQ_STACK==0 then
-					error( result, 3 )
-				else
-					error( { #REQ_STACK, result } )
-				end
-			elseif sfind( result, '^module' ) then
-				-- pass
+			-- we just got error from Lua, so we need to handle it
+
+			if sfind( result, "module '.+' not found" ) then
+				-- "module not found"
+				-- pass on this because we could have more places to check
+
+			elseif sfind( result, "error loading module" ) then
+				-- "error loading module"
+				-- we can't proceed with this error, so
+				-- package up to travel back up call-stack
+
+				result="\n\n"..result
+				err = wrapError( #REQ_STACK, result, 2 )
+
 			else
-				error( result )
+				-- we have some unknown error
+				err = wrapError( #REQ_STACK, result, 3 )
 			end
 
 		end
@@ -505,14 +518,16 @@ local function newRequireFunction( module_name )
 		idx=idx+1
 	until err or library or idx > #lua_paths
 
-	if not library then
-		local emsg = string.format( "\nThe module '%s' not found in archive:", tostring( module_name) )
-		local err = { #REQ_STACK, debug.traceback( emsg, 2 ) }
-		popStack()
-		error( err )
-	end
-
 	popStack()
+
+	if err then
+		error( processError( #REQ_STACK, err ) )
+
+	elseif not library then
+		-- print("not found")
+		local emsg = string.format( "\nThe module '%s' not found in archive:", tostring( module_name) )
+		error( wrapError( #REQ_STACK, debug.traceback( emsg ), 3 ))
+	end
 
 	return library
 end
@@ -568,13 +583,13 @@ local function setupRequireLoading()
 	-- modify the search paths, also adding 3rd party lib locations
 	for i=1,#path_info do
 		local mod_path, third_path
-		mod_path = path_info[i]
-		-- print( ">s1", sys2reqPath( mod_path ) )
-		table.insert( req_paths, sys2reqPath( mod_path ) )
+		mod_path =  sys2reqPath( path_info[i] )
+		-- print( ">s1", mod_path )
+		tinsert( req_paths, mod_path )
 		for i=1,#THIRD_LIBS do
 			third_path = THIRD_LIBS[i]
-			-- print( ">s2", sys2reqPath( mod_path..'.'..third_path ) )
-			table.insert( req_paths, sys2reqPath( mod_path..'.'..third_path ) )
+			-- print( ">s2", mod_path..'.'..third_path )
+			tinsert( req_paths, mod_path..'.'..third_path )
 		end
 	end
 end
