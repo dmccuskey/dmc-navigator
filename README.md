@@ -17,11 +17,12 @@ navigator:popViewAnimated()        -- slides back out; REMOVED_VIEW event
 
 ## Features
 
-- A stack of views with push and pop, the first view shown without animation
+- A stack of views with push, pop and pop to root, the first view shown without animation
+- A tap during a slide is safe: the running slide finishes at once, then the new one starts
 - A slide transition: the new view comes in from the right, the old one drifts a quarter of the width to the left
 - Views are any display object (a group, an image) or a [dmc-objects](https://github.com/dmccuskey/dmc-objects) component
 - An event when a popped view can be removed, so the app decides how to dispose of it
-- An optional nav bar that moves along with the views (from DMC-Corona-UI; see [Known Issues](#known-issues))
+- An optional nav bar that moves along with the views (from DMC-Corona-UI)
 - MIT licensed
 
 ## Quick Start
@@ -82,7 +83,7 @@ Open the project in the Simulator. It shows a blue "Page 1". Click it: a green "
 
 If the console shows `module 'dmc_corona.dmc_navigator' not found` instead, `dmc_corona/` is missing from the root of the project folder.
 
-The navigator's origin is its top center, so each page is drawn around `x = 0`, from `y = 0` down. The first view pushed is shown at once; later ones slide in over 400 ms. Wait for a slide to finish before the next tap ([Known Issues](#known-issues)).
+The navigator's origin is its top center, so each page is drawn around `x = 0`, from `y = 0` down. The first view pushed is shown at once; later ones slide in over 400 ms. A tap during a slide finishes that slide at once, then starts the next.
 
 ### 3. Go Back
 
@@ -91,7 +92,7 @@ Add this to the end of `main.lua`:
 ```lua
 local back = display.newText( "< Back", 90, 60, native.systemFont, 40 )
 back:addEventListener( 'tap', function()
-	if top > 1 then navigator:popViewAnimated() end
+	navigator:popViewAnimated()
 	return true
 end )
 
@@ -111,13 +112,17 @@ removed page 3
 removed page 2
 ```
 
-`popViewAnimated()` hides the popped view and sends `REMOVED_VIEW` when the slide ends; removing the view is up to you. Don't pop the first view: the navigator isn't ready for an empty stack, hence the `top > 1` check.
+`popViewAnimated()` hides the popped view and sends `REMOVED_VIEW` when the slide ends; removing the view is up to you. On Page 1, Back does nothing: the first view stays.
+
+For a fuller app, with a title bar and pop to root, see the [example](examples/README.md).
 
 To update, copy `dmc_corona_boot.lua` and `dmc_corona/` again from the newer version. Keep your own `dmc_corona.cfg` if you have changed it.
 
 ## Reference
 
-`require 'dmc_corona.dmc_navigator'` returns the `Navigator` class, a [dmc-objects](https://github.com/dmccuskey/dmc-objects) `ComponentBase`: a display group you position with `x` and `y` and remove with `removeSelf()`.
+`require 'dmc_corona.dmc_navigator'` returns the `Navigator` class, a [dmc-objects](https://github.com/dmccuskey/dmc-objects) `ComponentBase`: a display group you position with `x` and `y` and remove with `removeSelf()`. `Navigator.VERSION` is the module's version (`"0.4.0"`).
+
+A push or pop while a slide runs first finishes that slide at once (as if its time were up), then does its own, so no call is lost.
 
 ### `Navigator:new( params )`
 
@@ -130,15 +135,23 @@ The navigator's origin is its top center: a view at `x = 0` is centered, and its
 
 ### `navigator:pushView( view, params )`
 
-Adds `view` to the navigator and makes it the top view. `view` is a display object, or a component with a `view` or `display` property (that one is inserted). The first view pushed is shown at once; later ones slide in unless `params.animate` is `false`. The view below is hidden when the slide ends (hidden objects get no touches).
+Adds `view` to the navigator and makes it the top view. `view` is a display object, or a component with a `view` or `display` property (that one is inserted). The first view pushed is shown at once; later ones slide in unless `params.animate` is `false`. The view below is hidden when the slide ends (hidden objects get no touches). The view joins `navigator.views` when its slide ends.
 
 ### `navigator:popViewAnimated()`
 
-Slides the top view out to the right and shows the one below, then hides the popped view and dispatches `REMOVED_VIEW` with it. The navigator keeps no reference to it; remove it (`view:removeSelf()`) or keep it to push again.
+Slides the top view out to the right and shows the one below, then hides the popped view and dispatches `REMOVED_VIEW` with it. The navigator keeps no reference to it; remove it (`view:removeSelf()`) or keep it to push again. Returns `true`, or `false` when the first view is on top: the first view is never popped.
+
+### `navigator:popToRoot( params )`
+
+Goes back to the first view: the views between it and the top one are removed at once (a `REMOVED_VIEW` for each, from the top down), then the top view slides out as in `popViewAnimated()`, or goes at once if `params.animate` is `false`. Returns `true`, or `false` when the first view is on top.
+
+### `navigator.top_view`, `navigator.views`
+
+`top_view` is the view on top, or `nil` before the first push. `views` is a copy of the stack as a list, the first view first; a view sliding in joins it when its slide ends, and one sliding out leaves it then.
 
 ### `navigator:cleanUp()`
 
-Stops a running slide and pops every view, dispatching `REMOVED_VIEW` for each, top first. Call it before `navigator:removeSelf()`, so the views are yours to remove.
+Finishes a running slide and pops every view, dispatching `REMOVED_VIEW` for each, top first. The next push is a new first view. Call it before `navigator:removeSelf()`, so the views are yours to remove.
 
 ### Events
 
@@ -147,12 +160,12 @@ Listen with `navigator:addEventListener( navigator.EVENT, handler )` (`'dmc-navi
 | field | value |
 |---|---|
 | `type` | `navigator.REMOVED_VIEW` (`'removed-view-event'`) |
-| `view` | the view popped |
+| `view` | the view popped; the navigator is done with it, so the handler may remove it |
 | `target` | the navigator |
 
 ### `navigator.nav_bar`
 
-Sets a nav bar to move with the views. The navigator calls its `_pushNavItemGetTransition( item, params )` and `_popNavItemGetTransition( params )`, each returning a function of the slide's percent, and each pushed view needs a `nav_bar_item` with a `backButton`, whose `onRelease` the navigator sets to `popViewAnimated()`. This was the NavBar of DMC-Corona-UI's 2015 version; the current one doesn't match ([Known Issues](#known-issues)).
+Sets a nav bar to move with the views. The navigator calls its `pushNavItemGetTransition( item, params )` and `popNavItemGetTransition( params )` (the NavBar of the current DMC-Corona-UI), or the same names with a leading underscore (its 2015 version), each returning a function of the slide's percent. Each pushed view needs a `nav_bar_item` with a `backButton`, whose `onRelease` the navigator sets to `popViewAnimated()`.
 
 ## Configuration
 
@@ -166,27 +179,26 @@ The `dmc_corona.cfg` in this repository has the section with the key commented o
 
 ## Known Issues
 
-- A push or pop while a slide runs corrupts the navigator: the first slide's `enterFrame` listener is never removed and pushes its view onto the stack again every frame, and the wrong view ends up on top. Wait for the slide to finish (400 ms by default).
-- Popping the first view empties the stack but keeps it as the root, so the next push slides in over nothing instead of appearing at once.
-- The nav bar doesn't work with the current DMC-Corona-UI: its NavBar has `pushNavItemGetTransition()` and `popNavItemGetTransition()`, without the leading underscore dmc-navigator calls.
-- The example in `examples/dmc-navigator-simple/` doesn't run: it needs the 2015 `dmc_widgets` (the old DMC-Corona-UI), its copy of `dmc_corona_boot.lua` stops at the first `require` in current Solar2D, and its `dmc_corona/lib/dmc_lua/` is empty. It can't be rebuilt until DMC-Corona-UI is updated (`snakemake build_all` fails looking for `DMC-Corona-Widgets`).
-- `viewIsVisible()` and `viewInMotion()` do nothing: they pass the call to a current view the navigator never sets (and `viewIsVisible()` is defined twice).
-- There's no way to read the stack or the top view, and no `popToRoot()`.
-- `dmc_navigator.lua` sets the global `_extend` (its copy of `Utils.extend()` declares the inner function without `local`).
-- Its version (`0.3.1`) isn't available to code.
-- Fixed in 0.3.1: `popViewAnimated()` crashed (`attempt to index field '_nav_bar'`) when no nav bar was set.
+- With a nav bar, `popToRoot()` slides out the second nav item's title, not the top one's: the nav bar has no pop to root, so the navigator pops its items one at a time, the last one animated.
+- The nav bar hasn't been tested with the current DMC-Corona-UI, whose own NavigationControl does the same job as dmc-navigator.
+
+Fixed issues are listed in the [CHANGELOG](CHANGELOG.md).
 
 ## Development
 
-Only `dmc_corona/dmc_navigator.lua` is written in this repository. The rest of `dmc_corona/` and `dmc_corona_boot.lua` are generated copies from [dmc-objects](https://github.com/dmccuskey/dmc-objects), [dmc-utils](https://github.com/dmccuskey/dmc-utils), [DMC-Lua-Library](https://github.com/dmccuskey/DMC-Lua-Library) and [dmc-corona-boot](https://github.com/dmccuskey/dmc-corona-boot); fix them there, then rebuild. The copies are made by Snakemake from sibling checkouts (`../dmc-objects`, `../DMC-Corona-Library` for the shared rules, and so on). From this repository's root folder:
+Only `dmc_corona/dmc_navigator.lua` is written in this repository. The rest of `dmc_corona/` and `dmc_corona_boot.lua` (and their copies in the example) are generated from [dmc-objects](https://github.com/dmccuskey/dmc-objects), [DMC-Lua-Library](https://github.com/dmccuskey/DMC-Lua-Library) and [dmc-corona-boot](https://github.com/dmccuskey/dmc-corona-boot); fix them there, then rebuild. The copies are made by Snakemake from sibling checkouts (`../dmc-objects`, `../DMC-Corona-Library` for the shared rules, and so on). From this repository's root folder:
 
 ```sh
-snakemake --cores 1 build_module
+snakemake --cores 1 build_all
 ```
 
-(`build_all` also builds the example, which fails until it is updated; see [Known Issues](#known-issues).)
+The tests are in `tests/dmc_navigator_spec.lua` ([lunatest](https://github.com/silentbicycle/lunatest)). Run them with plain Lua 5.1, with stand-ins for the Solar2D globals they touch (display objects, `Runtime`, `system.getTimer()`; slides run a frame at a time); it needs the `dkjson` rock:
 
-dmc-navigator has no tests. The Quick Start is the check that it works in Solar2D.
+```sh
+tests/run_unit.sh
+```
+
+Then check the [example](examples/README.md) in the Solar2D Simulator: push pages, tap Back and All Galleries, and tap again during a slide.
 
 ## License
 
