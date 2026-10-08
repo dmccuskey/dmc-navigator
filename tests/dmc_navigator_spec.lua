@@ -137,7 +137,7 @@ end
 
 
 function test_version()
-	assert_equal( '0.4.0', Navigator.VERSION )
+	assert_equal( '0.4.1', Navigator.VERSION )
 end
 
 function test_no_new_globals()
@@ -305,8 +305,9 @@ function test_nav_bar_current_names()
 	wait( SLIDE+50 )
 	assert_equal( 'push 100', bar.calls[1] )
 	assert_equal( 'pop 0', bar.calls[#bar.calls] )
-	assert_equal( v1.nav_bar_item.backButton.onRelease, v2.nav_bar_item.backButton.onRelease )
-	assert_not_nil( v2.nav_bar_item.backButton.onRelease )
+	-- the bar's own Back handling asks its delegate: no listener of ours
+	assert_nil( v2.nav_bar_item.backButton.onRelease )
+	assert_equal( nav, bar.delegate )
 end
 
 function test_nav_bar_2015_names()
@@ -319,15 +320,45 @@ function test_nav_bar_2015_names()
 	wait( SLIDE+50 )
 	assert_equal( 'push 100', bar.calls[1] )
 	assert_equal( 'pop 0', bar.calls[#bar.calls] )
+	assert_nil( bar.delegate )
 end
 
+-- the 2015 NavBar: the navigator listens to the Back button
 function test_back_button_pops()
-	nav.nav_bar = newNavBar( '' )
-	local v2 = newNavView( 'v2' )
-	nav:pushView( newNavView( 'v1' ) )
+	nav.nav_bar = newNavBar( '_' )
+	local v1, v2 = newNavView( 'v1' ), newNavView( 'v2' )
+	nav:pushView( v1 )
 	nav:pushView( v2 )
 	wait( SLIDE+50 )
+	assert_equal( v1.nav_bar_item.backButton.onRelease, v2.nav_bar_item.backButton.onRelease )
 	v2.nav_bar_item.backButton.onRelease{}
 	wait( SLIDE+50 )
 	assert_equal( 'v1', names( nav.views ) )
+end
+
+-- the current NavBar asks its delegate, the navigator, which pops the
+-- view and the item together and tells the bar not to pop on its own
+-- (both popped: the bar's second pop raised an error)
+function test_back_button_delegate()
+	local bar = newNavBar( '' )
+	nav.nav_bar = bar
+	nav:pushView( newNavView( 'v1' ) )
+	nav:pushView( newNavView( 'v2' ) )
+	nav:pushView( newNavView( 'v3' ) )
+	wait( SLIDE+50 )
+	assert_false( bar.delegate:shouldPopItem( bar ) )
+	-- a second press during the slide is ignored
+	wait( 50 )
+	assert_false( bar.delegate:shouldPopItem( bar ) )
+	wait( SLIDE+50 )
+	assert_equal( 'v1 v2', names( nav.views ) )
+end
+
+-- a bar which has a delegate keeps it
+function test_nav_bar_keeps_its_delegate()
+	local bar = newNavBar( '' )
+	local del = {}
+	bar.delegate = del
+	nav.nav_bar = bar
+	assert_equal( del, bar.delegate )
 end
