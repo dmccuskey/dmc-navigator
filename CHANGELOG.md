@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 (2026-10-07)
+
+### Fixed
+
+- With the current DMC-Corona-UI's NavBar, the Back button popped twice, and the bar raised an error on the next frame: the bar pops its top item itself when Back is released, and the navigator's own listener popped as well. Now the navigator makes itself the bar's delegate (unless the bar has one) and pops the view and the item together from `shouldPopItem`. A Back press during a slide is ignored.
+
 ## 0.4.0 (2026-10-01)
 
 ### Fixed

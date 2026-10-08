@@ -120,7 +120,7 @@ To update, copy `dmc_corona_boot.lua` and `dmc_corona/` again from the newer ver
 
 ## Reference
 
-`require 'dmc_corona.dmc_navigator'` returns the `Navigator` class, a [dmc-objects](https://github.com/dmccuskey/dmc-objects) `ComponentBase`: a display group you position with `x` and `y` and remove with `removeSelf()`. `Navigator.VERSION` is the module's version (`"0.4.0"`).
+`require 'dmc_corona.dmc_navigator'` returns the `Navigator` class, a [dmc-objects](https://github.com/dmccuskey/dmc-objects) `ComponentBase`: a display group you position with `x` and `y` and remove with `removeSelf()`. `Navigator.VERSION` is the module's version (`"0.4.1"`).
 
 A push or pop while a slide runs first finishes that slide at once (as if its time were up), then does its own, so no call is lost.
 
@@ -165,7 +165,9 @@ Listen with `navigator:addEventListener( navigator.EVENT, handler )` (`'dmc-navi
 
 ### `navigator.nav_bar`
 
-Sets a nav bar to move with the views. The navigator calls its `pushNavItemGetTransition( item, params )` and `popNavItemGetTransition( params )` (the NavBar of the current DMC-Corona-UI), or the same names with a leading underscore (its 2015 version), each returning a function of the slide's percent. Each pushed view needs a `nav_bar_item` with a `backButton`, whose `onRelease` the navigator sets to `popViewAnimated()`.
+Sets a nav bar to move with the views. The navigator calls its `pushNavItemGetTransition( item, params )` and `popNavItemGetTransition( params )` (the NavBar of the current DMC-Corona-UI), or the same names with a leading underscore (its 2015 version), each returning a function of the slide's percent. Each pushed view needs a `nav_bar_item` (a NavItem).
+
+The Back button pops the view and the bar's item together. The current NavBar asks its delegate before it pops an item (`shouldPopItem`): the navigator makes itself the bar's delegate, unless the bar already has one. If yours does, have its `shouldPopItem` call `navigator:popViewAnimated()` and return `false`. A Back press during a slide is ignored. With the 2015 NavBar, the navigator sets the `onRelease` of each item's `backButton` to `popViewAnimated()` instead.
 
 ## Configuration
 
@@ -180,7 +182,7 @@ The `dmc_corona.cfg` in this repository has the section with the key commented o
 ## Known Issues
 
 - With a nav bar, `popToRoot()` slides out the second nav item's title, not the top one's: the nav bar has no pop to root, so the navigator pops its items one at a time, the last one animated.
-- The nav bar hasn't been tested with the current DMC-Corona-UI, whose own NavigationControl does the same job as dmc-navigator.
+- DMC-Corona-UI's own [Navigation Control](https://github.com/dmccuskey/DMC-Corona-UI/blob/master/docs/controls.md) does the same job as dmc-navigator with a nav bar, and makes the bar and the items itself.
 
 Fixed issues are listed in the [CHANGELOG](CHANGELOG.md).
 
